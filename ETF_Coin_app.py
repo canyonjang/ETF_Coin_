@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 ETF_Coin — 가계자산 투자설계 11·12주차 수업용 체험 앱
-  ① 레버리지 volatility drag 시뮬레이터
+  ① 레버리지 변동성 끌림 시뮬레이터
   ② 커버드콜 복권 시뮬레이터
   ③ DeFi 수익 분해 계산기
 
@@ -62,7 +62,7 @@ st.caption("가계자산 투자설계 · 11주차 / 12주차 수업용. 숫자�
 tab1, tab2, tab3 = st.tabs(["① 레버리지", "② 커버드콜", "③ DeFi"])
 
 # ======================================================================
-# ① 레버리지 volatility drag
+# ① 레버리지 변동성 끌림
 # ======================================================================
 with tab1:
     st.subheader("① 레버리지 ETF는 왜 '기간 2배'가 아닌가")
@@ -80,11 +80,14 @@ with tab1:
         days = st.slider("기간 (거래일)", 10, 250, 60, step=10)
         move = st.slider("하루 변동폭 (%)", 0.5, 10.0, 3.0, step=0.5,
                          help="횡보는 ±이 값만큼 번갈아, 추세는 매일 같은 방향으로 움직입니다.")
-        picks = st.multiselect(
-            "비교할 배율",
-            ["1배 (지수)", "2배", "3배", "-1배 (인버스)", "-2배 (곱버스)"],
-            default=["1배 (지수)", "2배", "3배"],
-        )
+        # 비교할 배율 — multiselect 대신 체크박스를 씁니다.
+        # (Streamlit Cloud에서 multiselect 전용 스크립트 파일이 늦게 불러와져
+        #  수업 중 화면이 깨지는 일이 있어, 이미 쓰고 있는 체크박스로 바꿨습니다)
+        st.markdown("**비교할 배율**")
+        _opts = [("1배 (지수)", True), ("2배", True), ("3배", True),
+                 ("-1배 (인버스)", False), ("-2배 (곱버스)", False)]
+        picks = [nm for i, (nm, dft) in enumerate(_opts)
+                 if st.checkbox(nm, value=dft, key=f"lev{i}")]
         custom = ""
         if pattern == "직접 입력":
             custom = st.text_area(
@@ -158,7 +161,7 @@ with tab1:
         })
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
     st.caption("'단순 배율 계산' = 지수 수익률 × 배율. "
-               "실제와 이만큼 차이가 나는 것이 volatility drag입니다.")
+               "실제와 이만큼 차이가 나는 것이 변동성 끌림입니다.")
 
     # ---- 해석 --------------------------------------------------------
     if "1배 (지수)" in chosen and len(chosen) > 1:
@@ -173,7 +176,7 @@ with tab1:
         if worst and worst[1] < -0.005:
             box(f'<span class="big brick">{worst[0]}는 단순 계산보다 '
                 f'{abs(worst[1])*100:.1f}%p 더 손해를 봤습니다.</span><br>'
-                '<span class="muted">이 차이가 volatility drag입니다. '
+                '<span class="muted">이 차이가 변동성 끌림입니다. '
                 '수수료도, 추적오차도 아닙니다. 매일 2배를 정확히 지켜서 생긴 손실입니다.</span>')
         elif worst and worst[1] > 0.005:
             box(f'<span class="big blue">{worst[0]}는 단순 계산보다 '
@@ -202,28 +205,57 @@ with tab2:
         "내 주머니에서 나가는 게 아니라, 벌었을 돈이 들어오지 않는 것입니다. "
         "<b class='brick'>그러면서 하락 손실은 그대로 내 몫입니다.</b>")
 
+    S0 = 100_000          # 지금 주가는 10만원으로 고정합니다
+    T_ = 1.0 / 12.0       # 한 달
+    R_ = 0.03             # 이자율
+
+    def _ncdf(x):
+        return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
+
+    def call_price(strike, sigma):
+        """복권 값 = 한 달짜리 콜옵션의 이론가격 (블랙-숄즈)"""
+        if sigma <= 0 or strike <= 0:
+            return max(S0 - strike, 0.0)
+        sq = sigma * math.sqrt(T_)
+        d1 = (math.log(S0 / strike) + (R_ + sigma * sigma / 2) * T_) / sq
+        return S0 * _ncdf(d1) - strike * math.exp(-R_ * T_) * _ncdf(d1 - sq)
+
     c1, c2 = st.columns([1, 2])
     with c1:
-        s0 = st.number_input("지금 주가 (원)", 10_000, 1_000_000, 100_000, step=5_000)
-        strike_pct = st.slider("당첨 기준선(행사가) — 지금 주가보다 몇 % 위에 둘까", 0, 30, 5, step=1,
-                               help="주가가 이 선을 넘으면, 넘은 만큼은 복권을 산 사람이 가져갑니다. "
-                                    "내 수익은 이 선에서 멈춥니다. "
+        st.markdown("**① 지금 주가** &nbsp; 100,000원 <span class='muted'>(고정)</span>",
+                    unsafe_allow_html=True)
+        strike_pct = st.slider("② 당첨 기준선(행사가) — 지금 주가보다 몇 % 위에 둘까",
+                               0, 30, 5, step=1,
+                               help="주가가 이 선을 넘으면, 넘은 만큼은 복권을 산 사람이 "
+                                    "가져갑니다. 내 수익은 이 선에서 멈춥니다. "
                                     "선을 낮게 둘수록 더 빨리 멈춥니다.")
-        prem_pct = st.slider("복권 값(프리미엄) — 주가의 몇 %를 받을까", 0.5, 10.0, 2.0, step=0.5,
-                             help="복권을 팔고 미리 받는 돈입니다. 이 돈이 분배금의 재원이 됩니다. "
-                                  "당첨 기준선을 낮게 둘수록 당첨될 가능성이 커지므로, "
-                                  "사는 사람이 더 비싸게 쳐줍니다.")
-        shown = st.slider("한 달 뒤 주가가 이만큼 움직였다면 (%)", -40, 60, 20, step=1)
+        vol = st.slider("③ 시장의 불안(변동성) — 연 %", 10, 60, 25, step=5,
+                        help="주가가 얼마나 크게 움직일 것으로 보는가. "
+                             "크게 움직일 것 같을수록 당첨 가능성이 커지므로 "
+                             "복권 값이 비싸집니다. 이것이 VIX가 분배금을 좌우하는 이유입니다.")
+        shown = st.slider("④ 한 달 뒤 주가가 이만큼 움직였다면 (%)", -40, 60, 20, step=1)
 
-    strike = s0 * (1 + strike_pct / 100.0)
-    prem = s0 * (prem_pct / 100.0)
+    strike = S0 * (1 + strike_pct / 100.0)
+    prem = call_price(strike, vol / 100.0)
+    yield_pct = prem / S0 * 12 * 100          # 매달 같은 조건으로 판다고 가정
+    max_gain = (strike - S0) + prem
 
-    def payoff(end_price: float):
-        plain = end_price - s0
-        cc = min(end_price, strike) - s0 + prem
+    with c1:
+        st.markdown(
+            f"<div class='boxed' style='margin-top:10px'>"
+            f"<b>복권 값(프리미엄)</b><br>"
+            f"<span class='big brick'>{prem:,.0f} 원</span> "
+            f"<span class='muted'>= 주가의 {prem/S0*100:.2f}%</span><br>"
+            f"<span class='muted'>이 값은 ②와 ③에서 자동으로 계산됩니다. "
+            f"직접 고르는 것이 아닙니다.</span></div>",
+            unsafe_allow_html=True)
+
+    def payoff(end_price):
+        plain = end_price - S0
+        cc = min(end_price, strike) - S0 + prem
         return plain, cc
 
-    xs = [s0 * (1 + p / 100.0) for p in range(-50, 71, 1)]
+    xs = [S0 * (1 + p / 100.0) for p in range(-50, 71, 1)]
     curve = pd.DataFrame({
         "주식만 보유": [payoff(x)[0] for x in xs],
         "커버드콜": [payoff(x)[1] for x in xs],
@@ -233,7 +265,7 @@ with tab2:
     with c2:
         st.line_chart(curve, height=330)
 
-    end = s0 * (1 + shown / 100.0)
+    end = S0 * (1 + shown / 100.0)
     p_plain, p_cc = payoff(end)
     diff = p_cc - p_plain
 
@@ -244,12 +276,11 @@ with tab2:
     m4.metric("차이", f"{diff:,.0f} 원", "유리" if diff >= 0 else "불리", delta_color="off")
 
     if end > strike:
-        lost = end - strike
-        box(f'<span class="big brick">주가가 행사가({strike:,.0f}원)를 '
-            f'{lost:,.0f}원 넘었습니다.</span><br>'
-            f'그 {lost:,.0f}원은 전부 <b>복권 당첨자의 몫</b>입니다. '
-            f'내 수익은 {p_cc:,.0f}원에서 멈춰 있습니다.')
-    elif end < s0:
+        box(f'<span class="big brick">주가가 당첨 기준선({strike:,.0f}원)을 '
+            f'{end-strike:,.0f}원 넘었습니다.</span><br>'
+            f'그 {end-strike:,.0f}원은 복권을 산 사람의 몫입니다. '
+            f'내 수익은 {p_cc:,.0f}원에서 멈췄습니다.')
+    elif end < S0:
         box(f'<span class="big">주가가 떨어졌습니다. 손실은 {abs(p_plain):,.0f}원.</span><br>'
             f'복권 값 {prem:,.0f}원이 쿠션이 되어 {abs(p_cc):,.0f}원으로 줄었습니다. '
             '<b class="brick">다만 쿠션일 뿐, 하락을 막아주지는 않습니다.</b>')
@@ -258,38 +289,73 @@ with tab2:
             f'커버드콜이 {diff:,.0f}원 유리합니다.</span><br>'
             '<span class="muted">커버드콜이 가장 잘 작동하는 구간입니다.</span>')
 
+    # ---------------- 맞바꿈 표 ----------------
     st.markdown("---")
-    st.markdown("**분배금 해부 — 받은 돈이 전부 복권 값일까**")
+    st.markdown("**기준선을 어디에 두느냐에 따라 — 받는 돈과 벌 수 있는 돈**")
 
-    d1, d2 = st.columns([1, 2])
-    with d1:
-        target = st.slider("약속한 연 분배율 (%)", 1, 30, 12, step=1)
-        earned = st.slider("실제로 복권을 팔아 번 돈 (연 %)", 0, 30, 6, step=1)
-    with d2:
-        gap = max(target - earned, 0)
-        comp = pd.DataFrame(
-            {"연 %": [min(earned, target), gap]},
-            index=["복권 값", "원금 헐기"],
-        )
-        st.bar_chart(comp, height=190, horizontal=True)
-        st.caption("'복권 값'은 옵션 프리미엄으로 실제로 번 돈, "
+    rows = []
+    for k in [0, 5, 10, 15, 20, 25, 30]:
+        st_k = S0 * (1 + k / 100.0)
+        pm = call_price(st_k, vol / 100.0)
+        rows.append({
+            "당첨 기준선": f"+{k}%",
+            "복권 값(한 달)": f"{pm:,.0f} 원",
+            "연 분배율로 치면": f"{pm/S0*12*100:.1f} %",
+            "최대로 벌 수 있는 금액": f"{(st_k-S0)+pm:,.0f} 원",
+            "지금 선택": "◀" if k == strike_pct else "",
+        })
+    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+    box('<span class="big">두 칸이 <b>반대 방향으로</b> 움직입니다.</span><br>'
+        '분배금을 늘리려면 기준선을 낮춰야 하고, 그러면 벌 수 있는 돈이 줄어듭니다. '
+        '<b class="brick">분배금과 상승 여력은 맞바꾸는 관계입니다. 둘 다 가질 수 없습니다.</b><br>'
+        '<span class="muted">어느 쪽을 택할지는 상품이 아니라 내 목표가 정합니다. '
+        '③ 변동성을 올리면 표 전체가 함께 커집니다 — 시장이 불안할수록 복권 값이 비싸집니다.</span>')
+
+    # ---------------- 분배금 해부 ----------------
+    st.markdown("---")
+    st.markdown("**분배금 해부 — 약속한 분배금을 정말 벌고 있을까**")
+
+    d1_, d2_ = st.columns([1, 2])
+    with d1_:
+        st.markdown(
+            f"<div class='boxed'><b>실제로 복권을 팔아 번 돈</b><br>"
+            f"<span class='big blue'>연 {yield_pct:.1f}%</span><br>"
+            f"<span class='muted'>위에서 고른 기준선 +{strike_pct}%와 "
+            f"변동성 {vol}%로 계산된 값입니다.</span></div>",
+            unsafe_allow_html=True)
+        target = st.slider("⑤ 이 상품이 약속한 연 분배율 (%)", 0, 40, 12, step=1,
+                           help="운용사가 '월 분배'로 내걸은 숫자. "
+                                "위에서 번 돈보다 크면, 모자란 만큼은 원금에서 나갑니다.")
+    with d2_:
+        from_prem = min(yield_pct, target)
+        gap = max(target - yield_pct, 0.0)
+        comp = pd.DataFrame({"연 %": [from_prem, gap]}, index=["복권 값", "원금 헐기"])
+        st.bar_chart(comp, height=200, horizontal=True)
+        st.caption("'복권 값'은 옵션을 팔아 실제로 번 돈, "
                    "'원금 헐기'는 모자란 분배금을 메우려고 자산을 헐어낸 몫입니다.")
 
-    if gap > 0:
-        box(f'<span class="big brick">분배금 {target}% 중 {gap}%p는 '
+    if gap > 0.05:
+        box(f'<span class="big brick">약속한 {target}% 중 {gap:.1f}%p는 '
             '내 원금에서 나옵니다.</span><br>'
             '통장에는 똑같이 "분배금"이라고 찍히지만, 기준가(NAV)는 그만큼 줄어듭니다. '
-            '<b>분배율이 아니라 총수익(= 분배금 + 가격 변화)으로 판단해야 하는 이유입니다.</b>')
+            f'<b>이만큼을 정말 벌려면 기준선을 더 낮추거나, 시장이 더 불안해져야 합니다.</b>')
     else:
-        box('<span class="big blue">번 만큼만 나눠 주고 있습니다. 원금이 녹지 않습니다.</span><br>'
-            '<span class="muted">약속한 분배율을 복권 값 수입 위로 올리면 어떻게 되는지 해 보세요.</span>')
+        box(f'<span class="big blue">번 만큼만 나눠 주고 있습니다 '
+            f'(번 돈 {yield_pct:.1f}% ≥ 약속 {target}%).</span><br>'
+            '<span class="muted">약속한 분배율을 번 돈 위로 올려 보세요. '
+            '무엇으로 메우는지 보입니다.</span>')
 
     with st.expander("직접 확인해 볼 것"):
         st.markdown("""
-- 주가 슬라이더를 왼쪽 끝에서 오른쪽 끝까지 천천히 움직여 보세요. **두 선이 갈라지는 지점**은 어디입니까?
-- **프리미엄**을 올려 보세요. 꺾이는 지점의 높이가 어떻게 달라집니까?
-- **행사가**를 0%로, 그다음 30%로 바꿔 보세요. 분배금과 상승 여력 중 무엇이 늘고 무엇이 줄어듭니까?
-- 아래 분배금 해부에서 **약속한 분배율**을 올리고 **실제로 번 돈**은 그대로 두어 보세요.
+- **② 당첨 기준선**을 0%로, 그다음 30%로 바꿔 보세요.
+  그래프가 꺾이는 자리가 어디로 갑니까? 복권 값은 어떻게 됩니까?
+- **③ 변동성**을 10%에서 60%로 올려 보세요.
+  복권 값과 아래 표 전체가 어떻게 움직입니까?
+- **④ 한 달 뒤 주가**를 왼쪽 끝에서 오른쪽 끝까지 밀어 보세요.
+  '차이' 숫자가 '유리'에서 '불리'로 바뀌는 지점은 어디입니까?
+- **⑤ 약속한 연 분배율**을 '실제로 번 돈'보다 높게 올려 보세요.
+  모자란 돈은 어디서 나옵니까?
         """)
 
 # ======================================================================

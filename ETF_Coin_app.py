@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 ETF_Coin — 가계자산 투자설계 11·12주차 수업용 체험 앱
-  ① 레버리지 변동성 끌림 시뮬레이터
+  ① 레버리지 volatility drag 시뮬레이터
   ② 커버드콜 복권 시뮬레이터
   ③ DeFi 수익 분해 계산기
 
@@ -62,7 +62,7 @@ st.caption("가계자산 투자설계 · 11주차 / 12주차 수업용. 숫자�
 tab1, tab2, tab3 = st.tabs(["① 레버리지", "② 커버드콜", "③ DeFi"])
 
 # ======================================================================
-# ① 레버리지 변동성 끌림
+# ① 레버리지 volatility drag
 # ======================================================================
 with tab1:
     st.subheader("① 레버리지 ETF는 왜 '기간 2배'가 아닌가")
@@ -158,7 +158,7 @@ with tab1:
         })
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
     st.caption("'단순 배율 계산' = 지수 수익률 × 배율. "
-               "실제와 이만큼 차이가 나는 것이 변동성 끌림입니다.")
+               "실제와 이만큼 차이가 나는 것이 volatility drag입니다.")
 
     # ---- 해석 --------------------------------------------------------
     if "1배 (지수)" in chosen and len(chosen) > 1:
@@ -173,7 +173,7 @@ with tab1:
         if worst and worst[1] < -0.005:
             box(f'<span class="big brick">{worst[0]}는 단순 계산보다 '
                 f'{abs(worst[1])*100:.1f}%p 더 손해를 봤습니다.</span><br>'
-                '<span class="muted">이 차이가 변동성 끌림입니다. '
+                '<span class="muted">이 차이가 volatility drag입니다. '
                 '수수료도, 추적오차도 아닙니다. 매일 2배를 정확히 지켜서 생긴 손실입니다.</span>')
         elif worst and worst[1] > 0.005:
             box(f'<span class="big blue">{worst[0]}는 단순 계산보다 '

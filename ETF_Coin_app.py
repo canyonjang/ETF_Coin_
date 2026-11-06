@@ -369,87 +369,105 @@ with tab2:
 with tab3:
     st.subheader("③ 연 18%는 누가 내는 돈인가")
     box("표시된 수익률(APY)은 <b>약속이 아니라 가정</b>입니다. "
-        "그 수익이 ① 대출 이자 ② 거래 수수료 ③ 새로 찍어낸 토큰 중 "
+        "그 18%가 ① 대출 이자 ② 거래 수수료 ③ 새로 찍어낸 토큰 중 "
         "어디에서 나오는지에 따라 실제 결과가 완전히 달라집니다.")
+
+    APY = 18.0          # 표시된 연 수익률은 18%로 고정합니다
 
     c1, c2 = st.columns([1, 2])
     with c1:
-        apy = st.slider("표시된 연 수익률 (%)", 1, 60, 18, step=1)
-        st.markdown("**이 수익은 어디서 나오나** (합계 100%)")
-        w_int = st.slider("① 대출 이자 비중 (%)", 0, 100, 20, step=5)
-        w_fee = st.slider("② 거래 수수료 비중 (%)", 0, 100 - w_int, min(20, 100 - w_int), step=5)
-        w_tok = 100 - w_int - w_fee
-        st.markdown(f"③ 토큰 보상 비중 — <b class='brick'>{w_tok}%</b>",
-                    unsafe_allow_html=True)
-        tok_move = st.slider("1년 뒤 보상 토큰 가격 변화 (%)", -95, 100, -50, step=5)
-        use_il = st.checkbox("유동성 공급에 따른 비영구적 손실도 반영", value=False)
+        st.markdown(
+            "<div class='boxed'><b>표시된 연 수익률</b><br>"
+            "<span class='big brick'>18 %</span> "
+            "<span class='muted'>(고정)</span></div>", unsafe_allow_html=True)
+
+        w_tok = st.slider("① 이 중 '새로 찍어낸 토큰'의 비중 (%)", 0, 100, 60, step=10,
+                          help="이 슬라이더 하나만 움직이면 됩니다. "
+                               "나머지는 대출 이자와 거래 수수료가 반씩 자동으로 채웁니다.")
+        rest = 100 - w_tok
+        w_int = w_fee = rest / 2
+        st.caption(f"→ 대출 이자 {w_int:.0f}% · 거래 수수료 {w_fee:.0f}% · "
+                   f"**새로 찍어낸 토큰 {w_tok}%**")
+
+        tok_move = st.slider("② 1년 뒤 그 토큰의 가격 변화 (%)", -95, 100, -50, step=5)
+
+        use_il = st.checkbox("③ 유동성 공급의 비영구적 손실도 반영", value=False)
+        price_move = 100
         if use_il:
             price_move = st.slider("짝지은 자산의 가격 변화 (%)", -80, 300, 100, step=10)
 
-    # 수익 분해
-    r_int = apy * w_int / 100.0
-    r_fee = apy * w_fee / 100.0
-    r_tok_face = apy * w_tok / 100.0
+    # ---- 계산 ----
+    r_int = APY * w_int / 100.0
+    r_fee = APY * w_fee / 100.0
+    r_tok_face = APY * w_tok / 100.0
     r_tok_real = r_tok_face * (1 + tok_move / 100.0)
 
     il = 0.0
     if use_il:
         k = 1 + price_move / 100.0
-        # 정가격 공식: 2√k/(1+k) − 1
-        il = (2 * math.sqrt(k) / (1 + k) - 1) * 100.0
+        il = (2 * math.sqrt(k) / (1 + k) - 1) * 100.0      # 2√k/(1+k) − 1
 
     real = r_int + r_fee + r_tok_real + il
+    lost = APY - real
 
     with c2:
-        idx = ["① 이자", "② 수수료", "③ 토큰보상"] + (["비영구적손실"] if use_il else [])
-        comp = pd.DataFrame({
-            "표시 기준(%p)": [r_int, r_fee, r_tok_face] + ([0.0] if use_il else []),
-            "실제(%p)":      [r_int, r_fee, r_tok_real] + ([il] if use_il else []),
-        }, index=idx)
-        st.bar_chart(comp, height=300, horizontal=True, stack=False)
-        st.caption("①과 ②는 표시와 실제가 같습니다. 차이는 ③에서만 생깁니다.")
+        st.bar_chart(
+            pd.DataFrame({"연 %": [APY, real]}, index=["화면에 뜬 수익률", "실제 수익률"]),
+            height=220, horizontal=True)
+        st.dataframe(pd.DataFrame([
+            {"재원": "① 대출 이자", "비중": f"{w_int:.0f}%",
+             "화면 기준": f"{r_int:.1f}%p", "실제": f"{r_int:.1f}%p"},
+            {"재원": "② 거래 수수료", "비중": f"{w_fee:.0f}%",
+             "화면 기준": f"{r_fee:.1f}%p", "실제": f"{r_fee:.1f}%p"},
+            {"재원": "③ 새로 찍어낸 토큰", "비중": f"{w_tok}%",
+             "화면 기준": f"{r_tok_face:.1f}%p", "실제": f"{r_tok_real:.1f}%p"},
+        ] + ([{"재원": "비영구적 손실", "비중": "—",
+               "화면 기준": "0.0%p", "실제": f"{il:.1f}%p"}] if use_il else []),
+        ), use_container_width=True, hide_index=True)
+        st.caption("①과 ②는 누군가 실제로 낸 돈이라 화면과 실제가 같습니다. "
+                   "차이는 ③에서만 생깁니다.")
 
     m1, m2, m3 = st.columns(3)
-    m1.metric("표시된 수익률", f"{apy:.1f} %")
-    m2.metric("실제 수익률", f"{real:+.1f} %", f"{real - apy:+.1f}%p")
-    m3.metric("③ 토큰 보상이 차지하는 비중", f"{w_tok} %")
+    m1.metric("화면에 뜬 수익률", "18.0 %")
+    m2.metric("실제 수익률", f"{real:+.1f} %", f"{-lost:+.1f}%p", delta_color="off")
+    m3.metric("③ 새로 찍어낸 토큰 비중", f"{w_tok} %")
 
-    lost = apy - real
     if real < 0:
-        box(f'<span class="big brick">표시는 연 {apy}%였지만, 실제로는 {real:+.1f}%입니다.</span><br>'
+        box(f'<span class="big brick">화면에는 18%였지만, 실제로는 {real:+.1f}%입니다.</span><br>'
             '새로 찍어낸 토큰으로 받은 수익은, 그 토큰 가격이 떨어지면 함께 사라집니다. '
             '<b>받은 것이 무엇인지 확인하지 않으면 수익률은 숫자에 불과합니다.</b>')
-    elif lost > apy * 0.15:
-        box(f'<span class="big brick">표시는 {apy}%였지만 실제는 {real:+.1f}%입니다. '
+    elif lost > 1.0:
+        box(f'<span class="big brick">화면에는 18%였지만 실제는 {real:+.1f}%입니다. '
             f'{lost:.1f}%p가 사라졌습니다.</span><br>'
-            f'이 수익의 {w_tok}%는 새로 찍어낸 토큰입니다. '
-            '토큰 보상 비중이 높을수록 표시된 수익률과 실제가 벌어집니다.')
+            f'이 수익의 {w_tok}%가 새로 찍어낸 토큰이기 때문입니다. '
+            '<b>③의 비중이 높을수록 화면과 실제가 벌어집니다.</b>')
     else:
         box(f'<span class="big blue">실제 수익 {real:+.1f}%. '
-            '대부분이 누군가 실제로 낸 돈에서 나왔습니다.</span><br>'
-            '<span class="muted">토큰 보상 비중을 80%로 올려 보세요. 결과가 어떻게 달라집니까?</span>')
+            '거의 전부가 누군가 실제로 낸 돈에서 나왔습니다.</span><br>'
+            '<span class="muted">①을 80%로 올려 보세요. 같은 18%가 어떻게 달라집니까?</span>')
 
     st.markdown("---")
     st.markdown("**비교해 봅시다**")
-    cmp_df = pd.DataFrame([
-        {"대상": "미국 단기국채", "연 수익률": "약 4% 내외", "이 수익은 어디서 오나": "미국 정부가 내는 이자",
+    st.dataframe(pd.DataFrame([
+        {"대상": "미국 단기국채", "연 수익률": "약 4%",
+         "이 수익은 어디서 오나": "미국 정부가 내는 이자",
          "주요 위험": "거의 없음(달러 기준)"},
-        {"대상": "이 DeFi 예치", "연 수익률": f"표시 {apy}% / 실제 {real:+.1f}%",
-         "이 수익은 어디서 오나": f"이자 {w_int}% · 수수료 {w_fee}% · 새 토큰 {w_tok}%",
+        {"대상": "이 DeFi 예치", "연 수익률": f"화면 18% / 실제 {real:+.1f}%",
+         "이 수익은 어디서 오나": f"이자 {w_int:.0f}% · 수수료 {w_fee:.0f}% · 새 토큰 {w_tok}%",
          "주요 위험": "코드 결함 · 청산 · 토큰 가격 · 운영"},
-    ])
-    st.dataframe(cmp_df, use_container_width=True, hide_index=True)
+    ]), use_container_width=True, hide_index=True)
 
     box('<span class="big">두 수익률의 차이는 보너스가 아니라, '
         '내가 떠안은 <span class="brick">위험의 가격표</span>입니다.</span>')
 
     with st.expander("직접 확인해 볼 것"):
         st.markdown("""
-- **토큰 보상 비중**을 0%로 두고 실제 수익률을 봅니다. 그다음 80%로 올려 보세요.
-- **토큰 가격 변화**를 −50%로 놓습니다. 표시된 18%는 실제로 몇 %가 됩니까?
-- **비영구적 손실**을 켜고 짝지은 자산 가격을 +100%로 해 보세요. 수수료로 메워집니까?
-- 표시 수익률을 60%까지 올려 보세요. 그런 수익률이 무엇으로 지급될지 짐작이 갑니까?
+- **①을 0%로** 내려 보세요. 이자와 수수료만 남습니다. 화면과 실제가 같아집니까?
+- **①을 80%로** 올려 보세요. 같은 18%인데 실제는 몇 %가 됩니까?
+- **②를 −95%로** 내려 보세요. 토큰이 거의 휴지가 되면 어떻게 됩니까?
+- **③을 켜고** 짝지은 자산 가격을 +100%로 해 보세요. 수수료로 메워집니까?
         """)
+
 
 st.markdown("---")
 st.caption("ETF_Coin · 가계자산 투자설계 11·12주차 · 모든 계산은 이 화면 안에서만 이루어집니다.")

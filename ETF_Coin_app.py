@@ -381,7 +381,7 @@ with tab3:
             "<span class='big brick'>18 %</span> "
             "<span class='muted'>(고정)</span></div>", unsafe_allow_html=True)
 
-        w_tok = st.slider("① 이 중 '새로 찍어낸 토큰'의 비중 (%)", 0, 100, 60, step=10,
+        w_tok = st.slider("가.  이 중 '새로 찍어낸 토큰'의 비중 (%)", 0, 100, 60, step=10,
                           help="이 슬라이더 하나만 움직이면 됩니다. "
                                "나머지는 대출 이자와 거래 수수료가 반씩 자동으로 채웁니다.")
         rest = 100 - w_tok
@@ -389,9 +389,9 @@ with tab3:
         st.caption(f"→ 대출 이자 {w_int:.0f}% · 거래 수수료 {w_fee:.0f}% · "
                    f"**새로 찍어낸 토큰 {w_tok}%**")
 
-        tok_move = st.slider("② 1년 뒤 그 토큰의 가격 변화 (%)", -95, 100, -50, step=5)
+        tok_move = st.slider("나.  1년 뒤 그 토큰의 가격 변화 (%)", -95, 100, -50, step=5)
 
-        use_il = st.checkbox("③ 유동성 공급의 비영구적 손실도 반영", value=False)
+        use_il = st.checkbox("다.  유동성 공급의 비영구적 손실도 반영", value=False)
         price_move = 100
         if use_il:
             price_move = st.slider("짝지은 자산의 가격 변화 (%)", -80, 300, 100, step=10)
@@ -409,6 +409,8 @@ with tab3:
 
     real = r_int + r_fee + r_tok_real + il
     lost = APY - real
+    loss_tok = r_tok_face - r_tok_real      # 토큰 가격이 떨어져서 사라진 몫
+    loss_il = -il                           # 비영구적 손실로 사라진 몫
 
     with c2:
         st.bar_chart(
@@ -425,26 +427,41 @@ with tab3:
                "화면 기준": "0.0%p", "실제": f"{il:.1f}%p"}] if use_il else []),
         ), use_container_width=True, hide_index=True)
         st.caption("①과 ②는 누군가 실제로 낸 돈이라 화면과 실제가 같습니다. "
-                   "차이는 ③에서만 생깁니다.")
+                   + ("차이는 ③과 비영구적 손실에서 생깁니다."
+                      if use_il else "차이는 ③에서만 생깁니다."))
 
     m1, m2, m3 = st.columns(3)
     m1.metric("화면에 뜬 수익률", "18.0 %")
     m2.metric("실제 수익률", f"{real:+.1f} %", f"{-lost:+.1f}%p", delta_color="off")
     m3.metric("③ 새로 찍어낸 토큰 비중", f"{w_tok} %")
 
+    # 사라진 몫이 어디서 나왔는지 쪼개서 설명합니다.
+    detail = ""
+    if loss_tok > 0.05:
+        detail += f"그중 {loss_tok:.1f}%p는 ③ 토큰의 가격이 떨어져서 생겼습니다. "
+    if loss_il > 0.05:
+        detail += f"{loss_il:.1f}%p는 비영구적 손실입니다. "
+
     if real < 0:
         box(f'<span class="big brick">화면에는 18%였지만, 실제로는 {real:+.1f}%입니다.</span><br>'
-            '새로 찍어낸 토큰으로 받은 수익은, 그 토큰 가격이 떨어지면 함께 사라집니다. '
-            '<b>받은 것이 무엇인지 확인하지 않으면 수익률은 숫자에 불과합니다.</b>')
+            + detail +
+            '<b>새로 찍어낸 토큰으로 받은 수익은, 그 토큰 가격이 떨어지면 함께 사라집니다.</b>')
     elif lost > 1.0:
         box(f'<span class="big brick">화면에는 18%였지만 실제는 {real:+.1f}%입니다. '
             f'{lost:.1f}%p가 사라졌습니다.</span><br>'
-            f'이 수익의 {w_tok}%가 새로 찍어낸 토큰이기 때문입니다. '
-            '<b>③의 비중이 높을수록 화면과 실제가 벌어집니다.</b>')
+            + detail +
+            '<b>③의 비중이 클수록, 그리고 그 토큰이 많이 떨어질수록 차이가 벌어집니다. '
+            '둘 중 하나만으로는 차이가 생기지 않습니다.</b>')
+    elif w_tok >= 50:
+        box(f'<span class="big blue">실제 수익 {real:+.1f}%. 화면과 거의 같습니다.</span><br>'
+            f'이 수익의 {w_tok}%가 새로 찍어낸 토큰인데도 그렇습니다. '
+            '<b>토큰 가격이 떨어지지 않았기 때문입니다.</b> '
+            '나를 내려 보세요. 그때 비로소 차이가 벌어집니다.')
     else:
         box(f'<span class="big blue">실제 수익 {real:+.1f}%. '
             '거의 전부가 누군가 실제로 낸 돈에서 나왔습니다.</span><br>'
-            '<span class="muted">①을 80%로 올려 보세요. 같은 18%가 어떻게 달라집니까?</span>')
+            '<span class="muted">가를 80%로 올리고 나를 내려 보세요. '
+            '같은 18%가 어떻게 달라집니까?</span>')
 
     st.markdown("---")
     st.markdown("**비교해 봅시다**")
@@ -462,10 +479,10 @@ with tab3:
 
     with st.expander("직접 확인해 볼 것"):
         st.markdown("""
-- **①을 0%로** 내려 보세요. 이자와 수수료만 남습니다. 화면과 실제가 같아집니까?
-- **①을 80%로** 올려 보세요. 같은 18%인데 실제는 몇 %가 됩니까?
-- **②를 −95%로** 내려 보세요. 토큰이 거의 휴지가 되면 어떻게 됩니까?
-- **③을 켜고** 짝지은 자산 가격을 +100%로 해 보세요. 수수료로 메워집니까?
+- **가를 0%로** 내려 보세요. 이자와 수수료만 남습니다. 화면과 실제가 같아집니까?
+- **가를 80%로** 올려 보세요. 같은 18%인데 실제는 몇 %가 됩니까?
+- **나를 −95%로** 내려 보세요. 토큰이 거의 휴지가 되면 어떻게 됩니까?
+- **다를 켜고** 짝지은 자산 가격을 +100%로 해 보세요. 수수료로 메워집니까?
         """)
 
 
